@@ -2,7 +2,7 @@ load("@buildifier_prebuilt//:rules.bzl", "buildifier", "buildifier_test")
 load("@gz-msgs//tools:gz_msgs_generate.bzl", "gz_proto_library")
 load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_cc//cc:cc_test.bzl", "cc_test")
-load("@rules_gazebo//gazebo:headers.bzl", "gz_configure_header", "gz_export_header")
+load("@rules_gazebo//gazebo:headers.bzl", "gz_configure_header", "gz_export_header", "gz_include_header")
 load("@rules_license//rules:license.bzl", "license")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//bazel:gz_sim_system_libraries.bzl", "gz_sim_system_libraries")
@@ -78,16 +78,25 @@ gz_proto_library(
     ],
 )
 
+component_headers = glob(["include/gz/sim/components/*.hh"])
+
+gz_include_header(
+    name = "ComponentsInclude",
+    out = "include/gz/sim/components/components.hh",
+    hdrs = component_headers,
+)
+
 public_headers_no_gen = glob(
     [
         "include/gz/sim/*.hh",
+        "include/gz/sim/detail/vendor/entt/**/*.hpp",
+        "include/gz/sim/detail/vendor/entt/**/*.h",
         "include/gz/sim/comms/*.hh",
-        "include/gz/sim/components/*.hh",
         "include/gz/sim/detail/*.hh",
         "include/gz/sim/physics/*.hh",
         "include/gz/sim/rendering/*.hh",
     ],
-)
+) + component_headers
 
 private_headers = glob(
     [
@@ -118,6 +127,7 @@ sources = glob(
 )
 
 public_headers = public_headers_no_gen + [
+    "include/gz/sim/components/components.hh",
     "include/gz/sim/config.hh",
     "include/gz/sim/Export.hh",
 ]
@@ -160,6 +170,7 @@ cc_library(
         "@gz-transport//parameters",
         "@gz-utils//:ImplPtr",
         "@gz-utils//:NeverDestroyed",
+        "@gz-utils//:SuppressWarning",
         "@sdformat",
         "@tinyxml2",
     ],
@@ -646,6 +657,7 @@ gz_sim_system_libraries(
             "src/systems/diff_drive/**/*.cc",
             "src/systems/diff_drive/**/*.hh",
         ],
+        exclude = ["src/systems/diff_drive/*_TEST.cc"],
     ),
     so_lib_name = "gz-sim-diff-drive-system.so",
     static_lib_name = "gz-sim-diff-drive-system-static",
@@ -659,6 +671,25 @@ gz_sim_system_libraries(
         "@gz-transport",
     ],
 )
+
+diff_drive_test_sources = glob([
+    "src/systems/diff_drive/*_TEST.cc",
+])
+
+[cc_test(
+    name = src.replace("/", "_").replace(".cc", "").replace("src_", ""),
+    srcs = [src],
+    copts = ["-Wno-private-header"],
+    deps = [
+        ":gz-sim",
+        ":gz-sim-diff-drive-system-static",
+        "//test:Helpers",
+        "@googletest//:gtest",
+        "@googletest//:gtest_main",
+        "@gz-utils//:ExtraTestMacros",
+        "@sdformat",
+    ],
+) for src in diff_drive_test_sources]
 
 gz_sim_system_libraries(
     srcs = glob(
